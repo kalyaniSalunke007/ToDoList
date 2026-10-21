@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>To-Do App</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{background:linear-gradient(-45deg,#0f172a,#0c4a6e,#134e4a,#1e1b4b);background-size:400% 400%;animation:bg 18s ease infinite;min-height:100vh;color:#e2e8f0}
+  @keyframes bg{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+  .blob{position:fixed;border-radius:50%;filter:blur(70px);opacity:.35;animation:float 12s ease-in-out infinite;z-index:0;pointer-events:none}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,-50px) scale(1.15)}}
+  .glass{background:rgba(255,255,255,.08);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.15)}
+  .pop-in{animation:pop .5s cubic-bezier(.2,1.3,.4,1) both}
+  @keyframes pop{from{opacity:0;transform:translateY(24px) scale(.9)}to{opacity:1;transform:none}}
+  .pop-out{animation:out .3s ease forwards}
+  @keyframes out{to{opacity:0;transform:translateX(60px) scale(.8)}}
+  .shake{animation:shake .4s}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+  .fade-slide{animation:fs .4s ease both}
+  @keyframes fs{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .task-text{background:linear-gradient(currentColor,currentColor) no-repeat 0 55%/0 2px;transition:background-size .4s ease,opacity .4s ease}
+  .done .task-text{background-size:100% 2px;opacity:.5}
+  .check{transition:all .3s cubic-bezier(.2,1.6,.4,1);color:transparent}
+  .done .check{background:#34d399;border-color:#34d399;transform:scale(1.15) rotate(360deg);color:#0f172a}
+  .btn-grad{background:linear-gradient(135deg,#06b6d4,#34d399);box-shadow:0 8px 24px rgba(6,182,212,.4);color:#0f172a}
+  .title-grad{background:linear-gradient(90deg,#34d399,#22d3ee,#a78bfa,#34d399);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+  @keyframes shine{to{background-position:300% 0}}
+  .modal-bg{animation:fade .25s ease both}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  input{outline:none}
+  input::placeholder{color:rgba(226,232,240,.45)}
+  #bar{transition:width .6s cubic-bezier(.2,1,.3,1)}
+</style>
+</head>
+<body>
+<div class="blob w-72 h-72 bg-emerald-500 top-10 -left-10"></div>
+<div class="blob w-80 h-80 bg-cyan-500 bottom-0 right-0" style="animation-delay:-4s"></div>
+<div class="blob w-64 h-64 bg-violet-500 top-1/2 left-1/2" style="animation-delay:-8s"></div>
+
+<main class="relative z-10 max-w-2xl mx-auto p-4 sm:p-8">
+  <header class="text-center mb-8 fade-slide">
+    <h1 class="title-grad text-4xl sm:text-5xl font-extrabold tracking-tight">✅ To-Do App</h1>
+    <p class="text-slate-300 mt-2">Add, edit, delete and complete your tasks</p>
+  </header>
+
+  <form id="todoForm" class="glass rounded-2xl p-4 flex gap-3 mb-5 fade-slide">
+    <input id="tInput" maxlength="120" placeholder="What needs to be done?" class="flex-1 bg-white/10 rounded-xl px-4 py-3 focus:ring-2 ring-cyan-400 transition">
+    <button class="btn-grad rounded-xl px-6 font-semibold hover:scale-105 active:scale-95 transition">Add</button>
+  </form>
+
+  <div class="glass rounded-2xl p-4 mb-5">
+    <div class="flex justify-between text-sm mb-2"><span id="count">0 active · 0 completed</span><span id="pct">0%</span></div>
+    <div class="h-2.5 bg-white/10 rounded-full overflow-hidden"><div id="bar" class="h-full w-0 rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400"></div></div>
+  </div>
+
+  <div class="flex justify-center gap-2 mb-5" id="filters">
+    <button data-f="all" class="f px-5 py-2 rounded-full text-sm font-medium transition btn-grad">All</button>
+    <button data-f="active" class="f px-5 py-2 rounded-full text-sm font-medium transition glass">Active</button>
+    <button data-f="completed" class="f px-5 py-2 rounded-full text-sm font-medium transition glass">Completed</button>
+  </div>
+
+  <ul id="todoList" class="grid gap-3"></ul>
+</main>
+
+<!-- EDIT MODAL -->
+<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 modal-bg">
+  <form id="modalForm" class="glass bg-slate-900/80 rounded-2xl p-6 w-full max-w-md grid gap-3 pop-in">
+    <h2 class="text-xl font-bold">✏️ Edit Task</h2>
+    <input id="mTitle" maxlength="120" class="bg-white/10 rounded-xl px-4 py-3 focus:ring-2 ring-cyan-400">
+    <div class="flex gap-3 justify-end">
+      <button type="button" id="mCancel" class="px-5 py-2 rounded-xl glass hover:scale-105 transition">Cancel</button>
+      <button class="px-5 py-2 rounded-xl btn-grad hover:scale-105 transition">Save</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// ---------- Data layer: uses Java server if running, otherwise browser storage ----------
+const API = 'http://localhost:8080/api';
+const KEY = 'todos';
+let online = false;
+const JSONH = { 'Content-Type': 'application/json' };
+const ls = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } };
+const lsSet = v => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} };
+
+const store = {
+  async list() { return online ? (await fetch(`${API}/${KEY}`)).json() : ls(); },
+  async add(item) {
+    if (online) return fetch(`${API}/${KEY}`, { method: 'POST', headers: JSONH, body: JSON.stringify(item) });
+    lsSet([...ls(), item]);
+  },
+  async update(item) {
+    if (online) return fetch(`${API}/${KEY}/${item.id}`, { method: 'PUT', headers: JSONH, body: JSON.stringify(item) });
+    lsSet(ls().map(x => x.id === item.id ? item : x));
+  },
+  async remove(id) {
+    if (online) return fetch(`${API}/${KEY}/${id}`, { method: 'DELETE' });
+    lsSet(ls().filter(x => x.id !== id));
+  }
+};
+
+async function detectBackend() {
+  try { online = (await fetch(`${API}/ping`, { signal: AbortSignal.timeout(1000) })).ok; }
+  catch { online = false; }
+}
+
+// ---------- State ----------
+let todos = [], filter = 'all', editingId = null;
+const seen = new Set();
+const shake = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); };
+
+function render() {
+  const list = todos.filter(t => filter === 'all' || (filter === 'active' ? !t.done : t.done));
+  $('#todoList').innerHTML = list.map((t, i) => `
+    <li data-id="${t.id}" class="glass rounded-xl p-4 flex items-center gap-4 hover:translate-x-1 transition duration-300 ${t.done ? 'done' : ''} ${seen.has(t.id) ? '' : 'pop-in'}" style="animation-delay:${i * 50}ms">
+      <button data-act="toggle" class="check w-7 h-7 shrink-0 rounded-full border-2 border-slate-400 flex items-center justify-center text-sm font-bold">✓</button>
+      <span class="task-text flex-1 break-words">${esc(t.text)}</span>
+      <button data-act="edit" class="w-9 h-9 rounded-lg glass hover:scale-110 transition">✏️</button>
+      <button data-act="del" class="w-9 h-9 rounded-lg glass hover:scale-110 transition">🗑️</button>
+    </li>`).join('') || `<p class="text-center text-slate-400 py-10 fade-slide">Nothing here 🎉</p>`;
+  list.forEach(t => seen.add(t.id));
+  updateStats();
+}
+
+function updateStats() {
+  const total = todos.length, doneN = todos.filter(t => t.done).length;
+  const pct = total ? Math.round(doneN / total * 100) : 0;
+  $('#count').textContent = `${total - doneN} active · ${doneN} completed`;
+  $('#pct').textContent = pct + '%';
+  $('#bar').style.width = pct + '%';
+}
+
+$('#todoForm').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('#tInput').value.trim();
+  if (!text) return shake($('#todoForm'));
+  const t = { id: uid(), text, done: false, createdAt: Date.now() };
+  await store.add(t);
+  todos.unshift(t);
+  e.target.reset(); render();
+};
+
+$('#filters').onclick = e => {
+  const b = e.target.closest('.f'); if (!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll('.f').forEach(x => { x.classList.toggle('btn-grad', x === b); x.classList.toggle('glass', x !== b); });
+  seen.clear(); render();
+};
+
+$('#todoList').onclick = async e => {
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const li = btn.closest('li'), id = li.dataset.id, t = todos.find(x => x.id === id);
+  if (btn.dataset.act === 'toggle') {
+    t.done = !t.done;
+    li.classList.toggle('done', t.done);
+    await store.update(t);
+    updateStats();
+    if (filter !== 'all') setTimeout(render, 450);
+  } else if (btn.dataset.act === 'del') {
+    li.classList.add('pop-out');
+    await store.remove(id);
+    setTimeout(() => { todos = todos.filter(x => x.id !== id); render(); }, 300);
+  } else {
+    editingId = id;
+    $('#mTitle').value = t.text;
+    $('#modal').classList.remove('hidden');
+    $('#mTitle').focus();
+  }
+};
+
+// ---------- Modal ----------
+const closeModal = () => { $('#modal').classList.add('hidden'); editingId = null; };
+$('#mCancel').onclick = closeModal;
+$('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); };
+document.onkeydown = e => { if (e.key === 'Escape') closeModal(); };
+
+$('#modalForm').onsubmit = async e => {
+  e.preventDefault();
+  if (!editingId) return;
+  const text = $('#mTitle').value.trim();
+  if (!text) return shake($('#modalForm'));
+  const t = todos.find(x => x.id === editingId);
+  t.text = text;
+  await store.update(t);
+  render(); closeModal();
+};
+
+(async () => { await detectBackend(); todos = await store.list(); render(); })();
+</script>
+</body>
+</html>
